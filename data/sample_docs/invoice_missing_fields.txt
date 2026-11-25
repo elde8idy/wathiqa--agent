@@ -1,0 +1,10 @@
+INVOICE
+Invoice number: NCS-0091
+Vendor: Nile Cloud Services
+Currency: EGP
+Category: software
+Net: 500.00
+VAT: 70.00
+Total: 570.00
+Bill to: Example Co
+Notes: monthly cloud hosting invoice. Date is not stated on this copy.

@@ -1,0 +1,12 @@
+EXPENSE CLAIM
+Claim form: EC-2026-041
+Vendor: Lotus Restaurant
+Date: 2026-10-08
+Currency: EGP
+Category: meals
+Net: 780.00
+VAT: 109.20
+Total: 889.20
+Line items:
+1x Client dinner @ 780.00
+Reason: client dinner, reimbursement claim.

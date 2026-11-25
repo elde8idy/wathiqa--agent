@@ -1,0 +1,13 @@
+INVOICE
+Invoice number: TH-2026-118
+Vendor: TechHub Software Ltd
+Date: 2026-10-02
+Currency: EGP
+Category: software
+Net: 1000.00
+VAT: 140.00
+Total: 1140.00
+Bill to: Example Co
+Line items:
+1x Annual SaaS subscription @ 1000.00
+Notes: annual software subscription invoice, due on receipt.

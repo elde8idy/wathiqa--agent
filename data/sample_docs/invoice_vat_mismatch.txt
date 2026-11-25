@@ -1,0 +1,12 @@
+INVOICE
+Invoice number: DOS-7782
+Vendor: Delta Office Supplies
+Date: 2026-10-05
+Currency: EGP
+Category: office_supplies
+Net: 1000.00
+VAT: 200.00
+Total: 1200.00
+Bill to: Example Co
+Line items:
+10x Printer paper @ 100.00
