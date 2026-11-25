@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     llm_provider : str = "groq"
     model : str = "openai/gpt-oss-120b" 
+    groq_api_key: str
 
     auto_approve_limit : float = 2000.0
     confidence_threshold: float = .7
