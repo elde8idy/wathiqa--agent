@@ -58,7 +58,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
-    uvicorn.run("wathqa.api:app", host=args.host, port=args.port, reload=False)
+    uvicorn.run("wathiqa_agent.api:app", host=args.host, port=args.port, reload=False)
     return 0
 
 
