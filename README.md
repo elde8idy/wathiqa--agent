@@ -1,215 +1,115 @@
-# WATHQA (وثيقة) — Agentic Expense Document Review
+# WATHQA (وثيقة)
 
-WATHQA is an agentic expense document-review system built with **LangGraph** and **LangChain**.
+An AI agent that reviews invoices and expense claims against company policies, and flags the ones that need a human decision.
 
-It processes expense documents (invoices, expense claims, and receipts), extracts structured information, checks documents against company expense policies, investigates suspicious cases using tools, and pauses for **human approval** whenever a document requires manual review.
+Built with LangGraph, LangChain, FastAPI and Pydantic. The LLM is Groq.
 
-The system supports an offline mode with a deterministic mock LLM provider, requiring zero API keys for local development and testing. It can also be configured to use **Groq (free tier)** or a fully local **Ollama** model by changing environment variables.
+## What it does
 
-## Architecture
+1. Reads a document (`.txt`, `.md`, or a `.pdf` with copyable text).
+2. Classifies it: invoice, expense claim, receipt, or unknown.
+3. Extracts vendor, date, currency, category, net, VAT and total into a Pydantic schema.
+4. Retrieves the relevant company policies.
+5. Runs deterministic checks: missing fields, category spending limits, VAT (14%), and net + VAT = total.
+6. If something is flagged, an investigation step uses tools (VAT calculator, line-item sum, policy search) to look closer.
+7. Decides: auto-approve, or pause for a human to approve or reject.
+
+## Review graph
 
 ```mermaid
 flowchart TD
-    START([START]) --> intake[intake: load document text]
-    intake --> classify[classify: document classification]
-    classify --> extract[extract: structured field extraction]
-    extract --> retrieve[retrieve_policies: policy retrieval]
-    retrieve --> validate[validate: compliance checks]
-    validate -->|flags raised| investigate[investigate: agentic tool loop]
-    validate -->|no flags| gate[gate: approval decision]
+    START([START]) --> intake
+    intake --> classify --> extract --> retrieve_policies --> validate
+    validate -->|flags| investigate
+    validate -->|no flags| gate
     investigate --> gate
-    gate -->|low confidence, flags, or high amount| human_review[[human_review: interrupt]]
-    gate -->|clean and confident| finalize[finalize: decision report]
-    human_review -->|approve / reject| finalize
-    finalize --> END([END])
+    gate -->|needs a human| human_review[[human_review: interrupt]]
+    gate -->|clean and confident| finalize
+    human_review --> finalize --> END([END])
 ```
 
-## Nodes and Responsibilities
+A review goes to a human when any of these is true:
 
-| Node | Description |
-|---|---|
-| `intake` | Loads document text from supported files (`.txt`, `.md`, and `.pdf`) using the document parser. |
-| `classify` | Classifies the document as `invoice`, `expense_claim`, `receipt`, or `unknown`. |
-| `extract` | Extracts vendor, amounts, currency, date, and category into a Pydantic schema. A completeness score is used as extraction confidence. |
-| `retrieve_policies` | Retrieves potentially relevant policies using dependency-free IDF keyword retrieval. |
-| `validate` | Performs deterministic compliance checks, including required fields, spending limits, VAT recomputation (14%), gross-total consistency, and non-reimbursable categories. |
-| `investigate` | Runs an agentic tool-calling loop using LangChain tools such as `vat_calculator`, `sum_line_items`, and `policy_search`. |
-| `gate` | Routes documents to human review when flags exist, confidence is low, or the amount exceeds the auto-approval limit. |
-| `human_review` | Uses LangGraph `interrupt()` to pause the graph until a human submits an `approve` or `reject` decision. |
-| `finalize` | Generates a Markdown decision report containing the review result, policy information, and investigation log. |
+- the checks raised flags
+- extraction confidence is below 0.7
+- the amount is above the auto-approve limit (2000)
 
-## Repository Structure
+The pause uses LangGraph `interrupt()` with a checkpointer, so the review can be resumed later with the human's answer. Checkpoints are kept in memory.
+
+## Project structure
 
 ```text
-wathiqa-agent/
-├── src/
-│   └── wathiqa_agent/
-│       ├── __init__.py
-│       ├── config.py       # Environment-variable settings
-│       ├── schemas.py      # Pydantic data contracts
-│       ├── state.py        # LangGraph state definitions
-│       ├── llm.py          # Provider factory and mock LLM
-│       ├── tools.py        # LangChain tools
-│       ├── policies.py     # Policy corpus and keyword retrieval
-│       ├── nodes.py        # Graph nodes and routing functions
-│       ├── graph.py        # StateGraph wiring and start/resume helpers
-│       ├── evaluate.py     # Evaluation harness
-│       ├── api.py          # FastAPI application
-│       └── __main__.py     # CLI commands: run / eval / serve
-├── data/
-│   ├── sample_docs/        # Sample expense documents
-│   └── gold/
-│       └── labels.json
-├── test/                   # Pytest test suite
-├── .env.example
-├── pyproject.toml
-└── README.md
+src/wathiqa_agent/
+  config.py     settings from environment variables
+  schemas.py    Pydantic data contracts
+  state.py      graph state
+  llm.py        Groq chat model factory
+  tools.py      LangChain tools: parse_document, vat_calculator, sum_line_items, policy_search
+  policies.py   policy list and keyword retriever
+  nodes.py      graph nodes and routing
+  graph.py      graph wiring, start_review, resume_review
+  evaluate.py   evaluation script
+  api.py        FastAPI app
+  __main__.py   command line: run, eval, serve
+frontend/
+  wathiqa-ui.html   single-file web UI
+data/sample_docs/   four sample documents
+test/               pytest tests
 ```
 
 ## Setup
 
-The project uses **Python 3.12** and `uv` for dependency and environment management.
-
-Install dependencies:
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
+git clone https://github.com/elde8idy/wathiqa--agent.git
+cd wathiqa--agent
 uv sync
 ```
 
-Create your environment file from the example:
-
-**Windows PowerShell:**
-```powershell
-Copy-Item .env.example .env
-```
-
-**Linux / macOS:**
-```bash
-cp .env.example .env
-```
-
-The default configuration uses the offline mock provider.
-
-## LLM Providers
-
-### Offline Mock Provider
-
-The default provider is deterministic and does not require an API key.
-
-It is useful for:
-- Local development.
-- Automated testing.
-- Reproducible demonstrations.
-
-### Groq (Free Tier)
-
-Configure your `.env` file:
+Create a `.env` file in the project root:
 
 ```env
-WATHQA_LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_api_key
-WATHQA_MODEL=llama-3.3-70b-versatile
+WATHIQA_GROQ_API_KEY=your_groq_api_key
 ```
 
-Install the provider integration:
+You can get a free key from the Groq console. Every setting uses the `WATHIQA_` prefix, including the key.
 
-```bash
-uv add langchain-groq
-```
+Optional settings and their defaults:
 
-### Ollama (Fully Local)
+| Variable | Default |
+|---|---|
+| `WATHIQA_LLM_PROVIDER` | `groq` (the only supported value) |
+| `WATHIQA_MODEL` | `openai/gpt-oss-120b` |
+| `WATHIQA_AUTO_APPROVE_LIMIT` | `2000` |
+| `WATHIQA_CONFIDENCE_THRESHOLD` | `0.7` |
+| `WATHIQA_MAX_INVESTIGATION_STEPS` | `3` |
+| `WATHIQA_VAT_RATE` | `0.14` |
 
-Pull a local model:
-
-```bash
-ollama pull qwen2.5:7b
-```
-
-Configure `.env`:
-
-```env
-WATHQA_LLM_PROVIDER=ollama
-WATHQA_MODEL=qwen2.5:7b
-```
-
-Install the provider integration:
-
-```bash
-uv add langchain-ollama
-```
-
-## CLI Demo
-
-Run the following commands from the project root.
-
-### 1. Clean Invoice — Auto Approval
+## Run from the command line
 
 ```bash
 uv run python -m wathiqa_agent run --file data/sample_docs/invoice_clean.txt
-```
-
-Expected behavior: the document is processed and automatically approved if all checks pass.
-
-### 2. VAT Mismatch — Human Review
-
-```bash
 uv run python -m wathiqa_agent run --file data/sample_docs/invoice_vat_mismatch.txt
-```
-
-Expected behavior: the VAT discrepancy is detected, investigated, and routed for human review.
-
-The reviewer can approve or reject the document when prompted.
-
-### 3. Over-limit Expense
-
-```bash
 uv run python -m wathiqa_agent run --file data/sample_docs/expense_over_limit.txt
+uv run python -m wathiqa_agent run --file data/sample_docs/invoice_missing_fields.txt
 ```
 
-Expected behavior: the expense exceeds the applicable spending limit and requires manual review.
+When a review needs a human, the CLI prints the flags and the investigation, then asks `approve` or `reject`. Add `--yes` to answer approve automatically. You can also pass text directly with `--text "..."`.
 
-## Example Review Report
-
-```text
-# WATHQA Review Report
-
-- Decision: auto_approved
-- Document type: invoice
-- Vendor: TechHub Software Ltd
-- Date: 2026-10-02
-- Category: software
-- Net: 1000.0
-- VAT: 140.0
-- Total: 1140.0 EGP
-- Extraction confidence: 1.0
-
-## Policy checks
-- all checks passed
-```
-
-## REST API
-
-WATHQA provides a REST API built with **FastAPI**.
-
-### Start the API Server
+## Run the API and the web UI
 
 ```bash
 uv run python -m wathiqa_agent serve --port 8000
 ```
 
-Open the interactive Swagger documentation:
+Swagger docs: http://127.0.0.1:8000/docs
 
-[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-### Available Endpoints
-
-| Method | Endpoint | Description |
+| Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Checks API health. |
-| POST | `/reviews` | Creates a new document review. |
-| POST | `/reviews/{thread_id}/resume` | Resumes a paused review after human feedback. |
-
-### Create a Review
+| GET | `/health` | Status and LLM provider |
+| POST | `/reviews` | Start a review with `document_text` or `document_path` |
+| POST | `/reviews/{thread_id}/resume` | Send `{"feedback": "approve"}` or `"reject"` |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/reviews \
@@ -217,17 +117,7 @@ curl -X POST http://127.0.0.1:8000/reviews \
   -d '{"document_path": "data/sample_docs/invoice_vat_mismatch.txt"}'
 ```
 
-A review requiring human intervention returns a response similar to:
-
-```json
-{
-  "status": "needs_review",
-  "thread_id": "...",
-  "flags": ["vat_mismatch"]
-}
-```
-
-### Resume a Review
+If the review needs a human, the response has `status: needs_review` and a `thread_id`. Resume it:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/reviews/<thread_id>/resume \
@@ -235,63 +125,21 @@ curl -X POST http://127.0.0.1:8000/reviews/<thread_id>/resume \
   -d '{"feedback": "approve"}'
 ```
 
-The response contains the final review status and decision report.
-
-## Evaluation
-
-Run the evaluation harness:
-
-```bash
-uv run python -m wathiqa_agent eval
-```
-
-The evaluation harness runs the graph against labelled sample documents and generates an `eval_report.json` file.
-
-The evaluation metrics include:
-
-- **doc_type_accuracy** — predicted versus expected document type.
-- **field_accuracy** — extraction accuracy for vendor, amount, currency, date, and category.
-- **routing_accuracy** — accuracy of auto-approval versus human-review routing.
-
-The deterministic mock provider is designed to produce reproducible results on the labelled sample documents. Real LLM providers may produce different results, making the evaluation harness useful for comparing models and prompts.
+For the web UI, start the server, then open `frontend/wathiqa-ui.html` in your browser. It talks to `http://127.0.0.1:8000` by default (editable in the page).
 
 ## Tests
-
-Run the complete test suite:
 
 ```bash
 uv run pytest -q
 ```
 
-Run a specific test file:
-
-```bash
-uv run pytest -v test/test_graph.py
-```
-
-The tests cover graph execution, validation, routing, and thread isolation, along with the API and other project components as corresponding tests are added.
-
-The graph tests currently include scenarios for:
-
-- Clean invoice auto-approval.
-- VAT mismatch and investigation routing.
-- Over-limit expense review.
-- Missing required fields.
-- Isolated threads for separate reviews.
+The tests call the real Groq model, so they need the API key in `.env`.
 
 ## Limitations
 
-- **Mock provider is not a real LLM.** It is a deterministic stand-in for development, testing, and demonstrations.
-- **Prompt-based extraction.** The extractor relies on LLM-generated JSON and tolerant parsing rather than strict provider-native structured output.
-- **Keyword-based policy retrieval.** The retriever uses token-overlap scoring rather than embeddings, making it simple and offline-friendly but less effective with paraphrased queries.
-- **In-memory checkpoints.** Human-review threads are stored in process memory. A production deployment should use persistent checkpointing, such as PostgreSQL.
-- **Limited policy corpus and sample documents.** The current dataset demonstrates the workflow but is not a replacement for a real company's finance policy database.
-
-## Future Improvements
-
-- Persistent checkpoint storage with PostgreSQL.
-- More robust policy retrieval using embeddings and vector databases.
-- Better extraction validation and error handling.
-- Expanded evaluation datasets and test coverage.
-- Authentication and authorization for API endpoints.
-- Production deployment and monitoring.
+- Text only. There is no OCR, so scanned images and photos of receipts are not supported.
+- Policies are a list in `policies.py`, searched by keyword overlap (no embeddings).
+- Review state is stored in memory and is lost when the server restarts.
+- Runs one document at a time. There is no batch mode.
+- No authentication on the API.
+- Groq is the only LLM provider.
