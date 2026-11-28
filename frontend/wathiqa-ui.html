@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WATHQA - Document Review</title>
+<title>WATHIQA - Document Review</title>
 <style>
 :root{--bg:#0b1115;--card:#121b21;--card2:#17232b;--line:#233440;--tx:#e6eef2;--mut:#8aa0ac;--acc:#2dd4bf;--acc2:#14b8a6;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}
 *{box-sizing:border-box}
@@ -57,7 +57,7 @@ details{margin-top:12px;color:var(--mut)}pre{white-space:pre-wrap;background:var
 <body>
 <header>
   <div class="logo">W</div>
-  <h1>WATHQA <small>Expense document review agent</small></h1>
+  <h1>WATHIQA <small>Expense document review agent</small></h1>
   <div class="spacer"></div>
   <div class="api"><span class="dot" id="dot"></span><input id="base" value="http://127.0.0.1:8000" spellcheck="false" title="API base URL"><button id="ping" style="padding:3px 8px">Check</button></div>
 </header>
@@ -152,7 +152,7 @@ function render(r, err) {
   $('out').innerHTML = h;
 }
 
-const HKEY='wathqa_hist';
+const HKEY='wathiqa_hist';
 const hist = () => JSON.parse(localStorage.getItem(HKEY)||'[]');
 function save(r) {
   const hs = hist().filter(x=>x.thread_id!==r.thread_id);
